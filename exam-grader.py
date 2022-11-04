@@ -8,10 +8,14 @@ import sys
 
 parser = argparse.ArgumentParser(
     description="Grade an exam read from the scantron sheets")
-parser.add_argument("roster",nargs=1,action="store")
-parser.add_argument("key",nargs=1,action="store")
-parser.add_argument("answers",nargs=1,action="store")
-parser.add_argument("results",nargs=1,action="store")
+parser.add_argument("roster",nargs=1,action="store",
+                    help="The roster downloaded from blackboard or brightspace (CSV)")
+parser.add_argument("key",nargs=1,action="store",
+                    help="The key produced by exam-writer (CSV)")
+parser.add_argument("answers",nargs=1,action="store",
+                    help="The exam answers returned from opscan (CSV)")
+parser.add_argument("results",nargs=1,action="store",
+                    help="The output file with a score for each student (CSV)")
 options = parser.parse_args()
 
 ###########################################################3
@@ -80,6 +84,9 @@ class ExamKey:
 # and a list with the provided answers for the student.  This may need
 # to be updated as the results format changes.  Check the file and
 # make the needed changes.
+#
+# NOTE: The scan file often includes header lines that need to be
+# skipped.  The best way is to use an editor by hand.
 class ExamAnswers:
     def __init__(self):
         self.student = list()
@@ -111,14 +118,35 @@ class ExamAnswers:
         for v in self.student:
             if sid == v["SID"]:
                 return v
-        print("No matching answers", sid)
+        print("No matching answers", lastname, firstname, sid)
         return None
 
+# Score the exam.  There are two cases.  If the key is upper case,
+# then the answer needs to exactly match the key ("ABC" must equal
+# "ABC").  If the key is lower case, then the answer must be inside
+# the key (B is inside "abc" so it's correct).
 def ScoreExam(key,answers):
     if answers is None: return 0
     score = 0
-    for a in zip(key["Answers"],answers["Answers"]):
-        if a[0] == a[1]: score = score + 1
+    for zz in zip(key["Answers"],answers["Answers"]):
+        kind = "BOGO"
+        good = "wrong"
+        answer = zz[1].replace(" ","").upper()
+        key = zz[0].replace(" ","")
+        if key == key.lower():
+            # Implement "or" for lower case answers in the key
+            kind = "or"
+            for aa in answer:
+                if aa in key.upper():
+                    score = score + 1
+                    good = "correct"
+                    break
+        else:
+            # Implement "and" for upper case answers in the key
+            kind = "and"
+            if key.upper() == answer:
+                good = "correct"
+                score = score + 1
     return score
     
 ####################################################################
