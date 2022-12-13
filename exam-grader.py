@@ -65,6 +65,7 @@ class ExamKey:
                     out["FIRSTNAME"] = v["FIRSTNAME"]
                     out["SID"] = v["SID"]
                     out["Answers"] = v["Answers"].split(';')
+                    out["QuestionNames"] = v["QuestionNames"].split(';')
                     self.student.append(out)
                         
         except:
@@ -125,14 +126,16 @@ class ExamAnswers:
 # then the answer needs to exactly match the key ("ABC" must equal
 # "ABC").  If the key is lower case, then the answer must be inside
 # the key (B is inside "abc" so it's correct).
-def ScoreExam(key,answers):
+def ScoreExam(key,answers,summary):
     if answers is None: return 0
+    summary["TOTAL"] = summary["TOTAL"] + 1
     score = 0
-    for zz in zip(key["Answers"],answers["Answers"]):
+    for zz in zip(key["Answers"],answers["Answers"],key["QuestionNames"]):
         kind = "BOGO"
         good = "wrong"
         answer = zz[1].replace(" ","").upper()
         key = zz[0].replace(" ","")
+        question = zz[2]
         if key == key.lower():
             # Implement "or" for lower case answers in the key
             kind = "or"
@@ -140,12 +143,16 @@ def ScoreExam(key,answers):
                 if aa in key.upper():
                     score = score + 1
                     good = "correct"
+                    if not question in summary: summary[question] = 0
+                    summary[question] = summary[question] + 1
                     break
         else:
             # Implement "and" for upper case answers in the key
             kind = "and"
             if key.upper() == answer:
                 good = "correct"
+                if not question in summary: summary[question] = 0
+                summary[question] = summary[question] + 1
                 score = score + 1
     return score
     
@@ -166,6 +173,8 @@ keys.ReadFile(options.key[0])
 answers = ExamAnswers()
 answers.ReadFile(options.answers[0])
 
+summary = dict()
+summary['TOTAL'] = 0
 for student, entry in zip(roster.student,roster.roster):
     key = keys.GetKey(student["SID"],student["LASTNAME"],student["FIRSTNAME"])
     if key is None: raise RuntimeError("Missing key")
@@ -173,8 +182,17 @@ for student, entry in zip(roster.student,roster.roster):
                                 student["LASTNAME"],
                                 student["FIRSTNAME"])
     lastKey = list(entry.keys())[-1]
-    score = ScoreExam(key,answer)
+    score = ScoreExam(key,answer,summary)
     entry[lastKey] = str(score)
+
+res = {key: val
+       for key, val in sorted(summary.items(), key = lambda ele: ele[0])}
+
+print("SUMMARY OF EXAM RESPONSES")
+for q in res:
+    if q == "TOTAL": pass
+    print("      Correct responses to ", q,summary[q])
+print("   Total students taking exam",summary["TOTAL"])
 
 fields = list(roster.roster[0].keys())
 
