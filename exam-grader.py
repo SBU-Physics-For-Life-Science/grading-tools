@@ -5,6 +5,7 @@ import string
 import argparse
 import os.path
 import sys
+import io
 
 parser = argparse.ArgumentParser(
     description="Grade an exam read from the scantron sheets")
@@ -31,7 +32,7 @@ class ExamRoster:
         
     def ReadFile(self,rosterFile):
         try:
-            with open(rosterFile,"r") as f:
+            with io.open(rosterFile,"r",encoding="ascii",errors="ignore") as f:
                 reader = csv.DictReader(f)
                 for v in reader:
                     ## Create the output list (elements are over-written)
@@ -57,7 +58,7 @@ class ExamKey:
     def ReadFile(self,keyFile):
         try:
             print(keyFile)
-            with open(keyFile,"r") as f:
+            with io.open(keyFile,"r",encoding="ascii",errors="ignore") as f:
                 reader = csv.DictReader(f)
                 for v in reader:
                     out = dict()
@@ -95,7 +96,7 @@ class ExamAnswers:
     def ReadFile(self,answerFile):
         try:
             print(answerFile)
-            with open(answerFile,"r") as f:
+            with io.open(answerFile,"r",encoding="ascii",errors="ignore") as f:
                 reader = csv.DictReader(f)
                 for v in reader:
                     out = dict()
