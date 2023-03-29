@@ -34,6 +34,7 @@ class ExamRoster:
         try:
             with io.open(rosterFile,"r",encoding="ascii",errors="ignore") as f:
                 reader = csv.DictReader(f)
+                count = 0
                 for v in reader:
                     ## Create the output list (elements are over-written)
                     out = dict()
@@ -41,8 +42,11 @@ class ExamRoster:
                         if "Last Name" in k: out["LASTNAME"] = v[k]
                         if "First Name" in k: out["FIRSTNAME"] = v[k]
                         if "Student ID" in k: out["SID"] = v[k]
+                    print("ROSTER ", out["LASTNAME"], out["FIRSTNAME"], out["SID"])
+                    count = count+1
                     self.student.append(out)
                     self.roster.append(v)
+                print("Students on roster",count)
         except:
             print ("Problem reading roster")
             raise RuntimeError("Roster parsing error")
@@ -60,6 +64,7 @@ class ExamKey:
             print(keyFile)
             with io.open(keyFile,"r",encoding="ascii",errors="ignore") as f:
                 reader = csv.DictReader(f)
+                count = 0
                 for v in reader:
                     out = dict()
                     out["LASTNAME"] = v["LASTNAME"]
@@ -67,8 +72,10 @@ class ExamKey:
                     out["SID"] = v["SID"]
                     out["Answers"] = v["Answers"].split(';')
                     out["QuestionNames"] = v["QuestionNames"].split(';')
+                    print("KEYS ", out["LASTNAME"], out["FIRSTNAME"], out["SID"])
+                    count = count + 1
                     self.student.append(out)
-                        
+                print("lines in key",count)
         except:
             print ("Problem reading key")
             raise RuntimeError("Key parsing error")
@@ -178,7 +185,9 @@ summary = dict()
 summary['TOTAL'] = 0
 for student, entry in zip(roster.student,roster.roster):
     key = keys.GetKey(student["SID"],student["LASTNAME"],student["FIRSTNAME"])
-    if key is None: raise RuntimeError("Missing key")
+    if key is None:
+        print (student["SID"],student["LASTNAME"],student["FIRSTNAME"])
+        raise RuntimeError("Missing key")
     answer = answers.GetAnswers(student["SID"],
                                 student["LASTNAME"],
                                 student["FIRSTNAME"])
