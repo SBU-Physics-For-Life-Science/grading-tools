@@ -41,7 +41,10 @@ class ExamRoster:
                     for k in v:
                         if "Last Name" in k: out["LASTNAME"] = v[k]
                         if "First Name" in k: out["FIRSTNAME"] = v[k]
+                        # next line matchs BlackBoard student id field
                         if "Student ID" in k: out["SID"] = v[k]
+                        # next line matchs BrightSpace student id field
+                        if "OrgDefinedId" in k: out["SID"] = v[k]
                     print("ROSTER ", out["LASTNAME"], out["FIRSTNAME"], out["SID"])
                     count = count+1
                     self.student.append(out)
