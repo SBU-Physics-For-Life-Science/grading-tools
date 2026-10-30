@@ -9,6 +9,12 @@ import io
 
 parser = argparse.ArgumentParser(
     description="Grade an exam read from the scantron sheets")
+parser.add_argument("-p","--by-problem", dest="byProblem", default=False,
+                    action="store_true",
+                    help="Also write a 0/1 column per problem to the results"
+                    " (randomized variants such as Question1.1_v2 are"
+                    " combined under Question1.1), and put the total in a"
+                    " 'Score' column instead of the roster's last column")
 parser.add_argument("roster",nargs=1,action="store",
                     help="The roster downloaded from blackboard or brightspace (CSV)")
 parser.add_argument("key",nargs=1,action="store",
@@ -29,11 +35,15 @@ class ExamRoster:
     def __init__(self):
         self.student = list()
         self.roster = list()
-        
+        self.fields = list()
+
     def ReadFile(self,rosterFile):
         try:
             with io.open(rosterFile,"r",encoding="ascii",errors="ignore") as f:
                 reader = csv.DictReader(f)
+                # The original roster columns, without unnamed ones.
+                self.fields = [k for k in reader.fieldnames
+                               if k is not None and k.strip() != ""]
                 count = 0
                 for v in reader:
                     ## Create the output list (elements are over-written)
@@ -73,8 +83,9 @@ class ExamKey:
                     out["LASTNAME"] = v["LASTNAME"]
                     out["FIRSTNAME"] = v["FIRSTNAME"]
                     out["SID"] = v["SID"]
-                    out["Answers"] = v["Answers"].split(';')
-                    out["QuestionNames"] = v["QuestionNames"].split(';')
+                    # The lists end with ";" so drop the empty last item.
+                    out["Answers"] = [a for a in v["Answers"].split(';') if a]
+                    out["QuestionNames"] = [q for q in v["QuestionNames"].split(';') if q]
                     print("KEYS ", out["LASTNAME"], out["FIRSTNAME"], out["SID"])
                     count = count + 1
                     self.student.append(out)
@@ -133,40 +144,47 @@ class ExamAnswers:
         print("No matching answers", lastname, firstname, sid)
         return None
 
+# Combine randomized variants of the same problem under one name, so
+# that "Question1.1_v1" and "Question1.1_v2" are both "Question1.1".
+def CanonicalQuestionName(question):
+    if "_v" in question:
+        base, version = question.rsplit("_v", 1)
+        if version.isdigit(): return base
+    return question
+
 # Score the exam.  There are two cases.  If the key is upper case,
 # then the answer needs to exactly match the key ("ABC" must equal
 # "ABC").  If the key is lower case, then the answer must be inside
 # the key (B is inside "abc" so it's correct).
+#
+# Returns the total score and a dictionary with a 0/1 result for each
+# problem of the exam.
 def ScoreExam(key,answers,summary):
-    if answers is None: return 0
+    results = {CanonicalQuestionName(q): 0 for q in key["QuestionNames"]}
+    if answers is None: return 0, results
     summary["TOTAL"] = summary["TOTAL"] + 1
     score = 0
     for zz in zip(key["Answers"],answers["Answers"],key["QuestionNames"]):
-        kind = "BOGO"
-        good = "wrong"
         answer = zz[1].replace(" ","").upper()
-        key = zz[0].replace(" ","")
-        question = zz[2]
-        if key == key.lower():
+        expected = zz[0].replace(" ","")
+        question = CanonicalQuestionName(zz[2])
+        correct = False
+        if expected == expected.lower():
             # Implement "or" for lower case answers in the key
-            kind = "or"
             for aa in answer:
-                if aa in key.upper():
-                    score = score + 1
-                    good = "correct"
-                    if not question in summary: summary[question] = 0
-                    summary[question] = summary[question] + 1
+                if aa in expected.upper():
+                    correct = True
                     break
         else:
             # Implement "and" for upper case answers in the key
-            kind = "and"
-            if key.upper() == answer:
-                good = "correct"
-                if not question in summary: summary[question] = 0
-                summary[question] = summary[question] + 1
-                score = score + 1
-    return score
-    
+            if expected.upper() == answer: correct = True
+        if correct:
+            score = score + 1
+            results[question] = 1
+            if not question in summary: summary[question] = 0
+            summary[question] = summary[question] + 1
+    return score, results
+
 ####################################################################
 # The main code begins here.
 
@@ -194,26 +212,54 @@ for student, entry in zip(roster.student,roster.roster):
     answer = answers.GetAnswers(student["SID"],
                                 student["LASTNAME"],
                                 student["FIRSTNAME"])
-    lastKey = list(entry.keys())[-1]
-    score = ScoreExam(key,answer,summary)
-    entry[lastKey] = str(score)
+    score, results = ScoreExam(key,answer,summary)
+    if options.byProblem:
+        # One 0/1 column per problem and the total in a "Score" column.
+        for question, result in results.items():
+            entry[question] = str(result)
+        entry["Score"] = str(score)
+    else:
+        # The score goes into the last (empty) column of the roster.
+        lastKey = list(entry.keys())[-1]
+        entry[lastKey] = str(score)
 
 res = {key: val
        for key, val in sorted(summary.items(), key = lambda ele: ele[0])}
 
 print("SUMMARY OF EXAM RESPONSES")
 for q in res:
-    if q == "TOTAL": pass
+    if q == "TOTAL": continue
     print("      Correct responses to ", q,summary[q])
 print("   Total students taking exam",summary["TOTAL"])
 
-fields = list(roster.roster[0].keys())
+if options.byProblem:
+    # Columns: the roster columns (minus identifier aliases, blank columns
+    # and old grading columns), one SID column, one column per problem in
+    # the order the problems appear in the keys, and the total.
+    questionFields = list()
+    for k in keys.student:
+        for question in k["QuestionNames"]:
+            question = CanonicalQuestionName(question)
+            if question not in questionFields: questionFields.append(question)
+    excluded = set(questionFields) | {"Student ID", "SID", "Score"}
+    baseFields = [f for f in roster.fields if f not in excluded]
+    fields = baseFields + ["SID"] + questionFields + ["Score"]
+    rows = list()
+    for student, row in zip(roster.student, roster.roster):
+        out = {f: row.get(f, "") for f in baseFields}
+        out["SID"] = student["SID"]
+        for question in questionFields: out[question] = row.get(question, "")
+        out["Score"] = row.get("Score", "")
+        rows.append(out)
+else:
+    # The roster as read, with the score in its last column.
+    fields = list(roster.roster[0].keys())
+    rows = roster.roster
 
 try:
-    with open(options.results[0],"x") as f:
+    with open(options.results[0],"x",newline="") as f:
         output = csv.DictWriter(f,fields)
         output.writeheader()
-        for row in roster.roster:
-            output.writerow(row)
+        for row in rows: output.writerow(row)
 except:
     raise RuntimeError("Bad result write")
