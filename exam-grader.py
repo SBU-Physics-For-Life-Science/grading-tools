@@ -153,15 +153,20 @@ def CanonicalQuestionName(question):
     return question
 
 # Score the exam.  There are two cases.  If the key is upper case,
-# then the answer needs to exactly match the key ("ABC" must equal
-# "ABC").  If the key is lower case, then the answer must be inside
-# the key (B is inside "abc" so it's correct).
+# then every letter of the key must be marked ("ABC" needs A, B and C
+# all marked).  If the key is lower case, then any marked letter in
+# the key is enough (B is inside "abc" so it's correct).  A student
+# who marks more letters than the key asks for still gets the point
+# when the correct answer is among the marks, but the question is
+# reported as a problem, as is a question left blank.
 #
-# Returns the total score and a dictionary with a 0/1 result for each
-# problem of the exam.
+# Returns the total score, a dictionary with a 0/1 result for each
+# problem of the exam, and a list of (question, answer, key) tuples for
+# the blank and multiple-mark answers.
 def ScoreExam(key,answers,summary):
     results = {CanonicalQuestionName(q): 0 for q in key["QuestionNames"]}
-    if answers is None: return 0, results
+    problems = list()
+    if answers is None: return 0, results, problems
     summary["TOTAL"] = summary["TOTAL"] + 1
     score = 0
     for zz in zip(key["Answers"],answers["Answers"],key["QuestionNames"]):
@@ -175,15 +180,22 @@ def ScoreExam(key,answers,summary):
                 if aa in expected.upper():
                     correct = True
                     break
+            marksAllowed = 1
         else:
-            # Implement "and" for upper case answers in the key
-            if expected.upper() == answer: correct = True
+            # Implement "and" for upper case answers in the key: every
+            # letter of the key must be among the marked letters.
+            if all(e in answer for e in expected.upper()): correct = True
+            marksAllowed = len(expected)
+        if answer == "":
+            problems.append((question, "blank", expected))
+        elif len(answer) > marksAllowed:
+            problems.append((question, answer, expected))
         if correct:
             score = score + 1
             results[question] = 1
             if not question in summary: summary[question] = 0
             summary[question] = summary[question] + 1
-    return score, results
+    return score, results, problems
 
 ####################################################################
 # The main code begins here.
@@ -228,6 +240,7 @@ if not options.byProblem and roster.roster:
 
 summary = dict()
 summary['TOTAL'] = 0
+sheetProblems = list()
 for student, entry in zip(roster.student,roster.roster):
     key = keys.GetKey(student["SID"],student["LASTNAME"],student["FIRSTNAME"])
     if key is None:
@@ -236,7 +249,10 @@ for student, entry in zip(roster.student,roster.roster):
     answer = answers.GetAnswers(student["SID"],
                                 student["LASTNAME"],
                                 student["FIRSTNAME"])
-    score, results = ScoreExam(key,answer,summary)
+    score, results, problems = ScoreExam(key,answer,summary)
+    for question, marked, expected in problems:
+        sheetProblems.append((student["LASTNAME"], student["FIRSTNAME"],
+                              student["SID"], question, marked, expected))
     if options.byProblem:
         # One 0/1 column per problem and the total in a "Score" column.
         for question, result in results.items():
@@ -255,6 +271,21 @@ for q in res:
     if q == "TOTAL": continue
     print("      Correct responses to ", q,summary[q])
 print("   Total students taking exam",summary["TOTAL"])
+
+# Report the answer sheets with blank or multiple-mark questions.
+# A multiple mark that includes the correct answer was given the point.
+if sheetProblems:
+    print("BLANK OR MULTIPLE-MARK ANSWERS")
+    for lastname, firstname, sid, question, marked, expected in sheetProblems:
+        credit = ""
+        if marked != "blank":
+            credit = " (point given)" if all(
+                e in marked for e in expected.upper()) else " (no point)"
+        print("   ", lastname, firstname, sid, question,
+              "marked", marked, "key", expected + credit)
+    print("   Sheets with problems",
+          len({(p[2]) for p in sheetProblems}),
+          "questions with problems", len(sheetProblems))
 
 if options.byProblem:
     # Columns: the roster columns (minus identifier aliases, blank columns

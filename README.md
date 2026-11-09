@@ -43,13 +43,17 @@ options:
 - `results`: the output CSV.  It is never overwritten; delete it first to
   grade again.
 
-A question whose key is in upper case (`ABC`) is correct only if the
-student marked exactly those letters.  A key in lower case (`abc`, which
+A question whose key is in upper case (`ABC`) is correct if the student
+marked all of those letters.  A key in lower case (`abc`, which
 exam-writer uses when several answers are correct) is correct if any of
-the marked letters is among them.
+the marked letters is among them.  A student who marks more letters
+than the key asks for still gets the point when the correct answer is
+among the marks.
 
 The run prints, for every question, how many students answered it
-correctly.
+correctly, and then lists every blank or multiple-mark answer with the
+student, the question, the marked letters and the key, saying whether
+the point was given.
 
 ### Per-problem results
 
