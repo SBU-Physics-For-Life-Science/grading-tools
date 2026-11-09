@@ -29,13 +29,17 @@ options:
   The columns `Last Name`, `First Name` and `Student ID` (Blackboard) or
   `OrgDefinedId` (Brightspace) are used to identify each student.
   Without `--by-problem` the score is written into the **last column**
-  of the roster, so export it with an empty trailing column.
+  of the roster if that column is empty for every student; otherwise a
+  `Score` column is appended, so the student identifier is never
+  overwritten.
 - `key`: the `<basename>-keys.csv` file written by `exam-writer.py`.
   Students are matched to their exam copy by student ID.
 - `answers`: the CSV returned by the scanning centre, with the columns
   `LAST NAME`, `FIRST NAME`, `STUDENT ID` and one column per question
   numbered `1`, `2`, ...  Header lines above the column names must be
-  removed by hand first.
+  removed by hand first.  Every student ID in this file must be on the
+  roster, otherwise the script stops and lists the unknown IDs; remove
+  the scanning centre's test sheet (ID `9999999999`, name `ZZZ`) too.
 - `results`: the output CSV.  It is never overwritten; delete it first to
   grade again.
 

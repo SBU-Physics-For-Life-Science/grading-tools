@@ -202,6 +202,30 @@ keys.ReadFile(options.key[0])
 answers = ExamAnswers()
 answers.ReadFile(options.answers[0])
 
+# Every student id in the answers must be on the roster.  Stop if one
+# is not, since that sheet could not be attributed to any student.
+rosterIds = {s["SID"].strip() for s in roster.student}
+unknown = [a for a in answers.student if a["SID"].strip() not in rosterIds]
+if unknown:
+    print("STUDENT ID IN ANSWERS NOT FOUND IN ROSTER:")
+    for a in unknown:
+        print("   ", a["SID"], a["LASTNAME"], a["FIRSTNAME"])
+    raise RuntimeError("Student id mismatch between answers and roster")
+
+# Without --by-problem the score goes into the last column of the
+# roster, but only if that column is empty.  If the roster has no empty
+# trailing column (so the last column holds data such as the student
+# id), a "Score" column is added instead.
+scoreField = "Score"
+if not options.byProblem and roster.roster:
+    lastKey = list(roster.roster[0].keys())[-1]
+    if lastKey is not None and all(
+            (row.get(lastKey) or "").strip() == "" for row in roster.roster):
+        scoreField = lastKey
+    else:
+        print("Last roster column", repr(lastKey),
+              "is not empty: the score is written to a 'Score' column")
+
 summary = dict()
 summary['TOTAL'] = 0
 for student, entry in zip(roster.student,roster.roster):
@@ -219,9 +243,9 @@ for student, entry in zip(roster.student,roster.roster):
             entry[question] = str(result)
         entry["Score"] = str(score)
     else:
-        # The score goes into the last (empty) column of the roster.
-        lastKey = list(entry.keys())[-1]
-        entry[lastKey] = str(score)
+        # The score goes into the last (empty) column of the roster, or
+        # into a "Score" column if the last column is not empty.
+        entry[scoreField] = str(score)
 
 res = {key: val
        for key, val in sorted(summary.items(), key = lambda ele: ele[0])}
@@ -252,8 +276,10 @@ if options.byProblem:
         out["Score"] = row.get("Score", "")
         rows.append(out)
 else:
-    # The roster as read, with the score in its last column.
+    # The roster as read, with the score in its last column or in an
+    # added "Score" column.
     fields = list(roster.roster[0].keys())
+    if scoreField not in fields: fields.append(scoreField)
     rows = roster.roster
 
 try:
