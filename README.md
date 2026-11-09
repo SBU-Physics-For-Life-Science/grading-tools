@@ -41,7 +41,11 @@ options:
   roster, otherwise the script stops and lists the unknown IDs; remove
   the scanning centre's test sheet (ID `9999999999`, name `ZZZ`) too.
 - `results`: the output CSV.  It is never overwritten; delete it first to
-  grade again.
+  grade again.  A bar chart of the score distribution is saved next to
+  it with the same name and a `.png` ending (requires matplotlib).
+  Scores of zero are left out and the mean of the rest is drawn as a
+  dashed line and given in the legend, also as a percentage of the
+  maximum score.
 
 A question whose key is in upper case (`ABC`) is correct if the student
 marked all of those letters.  A key in lower case (`abc`, which
@@ -51,7 +55,7 @@ than the key asks for still gets the point when the correct answer is
 among the marks.
 
 The run prints, for every question, how many students answered it
-correctly, and then lists every blank or multiple-mark answer with the
+correctly and the percentage of those taking the exam, and then lists every blank or multiple-mark answer with the
 student, the question, the marked letters and the key, saying whether
 the point was given.
 

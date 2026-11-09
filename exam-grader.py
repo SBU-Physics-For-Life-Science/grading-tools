@@ -197,6 +197,48 @@ def ScoreExam(key,answers,summary):
             summary[question] = summary[question] + 1
     return score, results, problems
 
+# Draw the distribution of the scores as a bar chart with one bar per
+# possible score and save it as a PNG.  Scores of zero are left out,
+# since they are mostly students who did not take the exam.  The mean
+# of the remaining scores is drawn as a line and given in the legend.
+def PlotScores(scores, maxScore, plotFile):
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("matplotlib is not installed: no plot of the scores")
+        return
+    scores = [sc for sc in scores if sc > 0]
+    if not scores:
+        print("No non-zero scores: no plot of the scores")
+        return
+    mean = sum(scores)/len(scores)
+    values = list(range(1, maxScore+1))
+    counts = [scores.count(v) for v in values]
+
+    surface, ink, muted, blue = "#fcfcfb", "#0b0b0b", "#52514e", "#2a78d6"
+    fig, ax = plt.subplots(figsize=(8, 4.5), dpi=150)
+    fig.patch.set_facecolor(surface)
+    ax.set_facecolor(surface)
+    ax.bar(values, counts, width=0.8, color=blue, linewidth=0, zorder=2)
+    ax.axvline(mean, color=ink, linestyle="--", linewidth=1.5, zorder=3,
+               label="Mean = %.2f (%.1f%%)" % (mean, 100.0*mean/maxScore))
+    ax.set_xticks(values)
+    ax.set_xlim(0.4, maxScore+0.6)
+    ax.set_xlabel("Score", color=ink)
+    ax.set_ylabel("Number of students", color=ink)
+    ax.set_title("Distribution of scores", color=ink, loc="left")
+    ax.yaxis.grid(True, color="#e3e2de", linewidth=0.8, zorder=0)
+    ax.set_axisbelow(True)
+    for side in ax.spines.values(): side.set_color(muted)
+    ax.tick_params(colors=muted, length=3)
+    ax.legend(frameon=False, loc="upper left", labelcolor=ink)
+    fig.tight_layout()
+    fig.savefig(plotFile, facecolor=surface)
+    plt.close(fig)
+    print("Plot of the scores written to", plotFile)
+
 ####################################################################
 # The main code begins here.
 
@@ -241,6 +283,7 @@ if not options.byProblem and roster.roster:
 summary = dict()
 summary['TOTAL'] = 0
 sheetProblems = list()
+scores = list()
 for student, entry in zip(roster.student,roster.roster):
     key = keys.GetKey(student["SID"],student["LASTNAME"],student["FIRSTNAME"])
     if key is None:
@@ -250,6 +293,7 @@ for student, entry in zip(roster.student,roster.roster):
                                 student["LASTNAME"],
                                 student["FIRSTNAME"])
     score, results, problems = ScoreExam(key,answer,summary)
+    scores.append(score)
     for question, marked, expected in problems:
         sheetProblems.append((student["LASTNAME"], student["FIRSTNAME"],
                               student["SID"], question, marked, expected))
@@ -267,10 +311,13 @@ res = {key: val
        for key, val in sorted(summary.items(), key = lambda ele: ele[0])}
 
 print("SUMMARY OF EXAM RESPONSES")
+total = summary["TOTAL"]
 for q in res:
     if q == "TOTAL": continue
-    print("      Correct responses to ", q,summary[q])
-print("   Total students taking exam",summary["TOTAL"])
+    fraction = summary[q]/total if total > 0 else 0.0
+    print("      Correct responses to ", q, summary[q],
+          "(%.1f%%)" % (100.0*fraction))
+print("   Total students taking exam", total)
 
 # Report the answer sheets with blank or multiple-mark questions.
 # A multiple mark that includes the correct answer was given the point.
@@ -320,3 +367,7 @@ try:
         for row in rows: output.writerow(row)
 except:
     raise RuntimeError("Bad result write")
+
+# The plot goes next to the results, with the same name and a .png ending.
+maxScore = max(len(k["QuestionNames"]) for k in keys.student)
+PlotScores(scores, maxScore, os.path.splitext(options.results[0])[0] + ".png")
