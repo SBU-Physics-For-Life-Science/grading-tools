@@ -156,9 +156,10 @@ def CanonicalQuestionName(question):
 # then every letter of the key must be marked ("ABC" needs A, B and C
 # all marked).  If the key is lower case, then any marked letter in
 # the key is enough (B is inside "abc" so it's correct).  A student
-# who marks more letters than the key asks for still gets the point
-# when the correct answer is among the marks, but the question is
-# reported as a problem, as is a question left blank.
+# who marks more letters than the key asks for gets no point, even when
+# the correct answer is among the marks: the question is reported as a
+# problem, saying whether the key is among the marks, and the professor
+# decides what to do.  A question left blank is reported too.
 #
 # Returns the total score, a dictionary with a 0/1 result for each
 # problem of the exam, and a list of (question, answer, key) tuples for
@@ -189,7 +190,9 @@ def ScoreExam(key,answers,summary):
         if answer == "":
             problems.append((question, "blank", expected))
         elif len(answer) > marksAllowed:
+            # Too many marks: no point, flag it for the professor.
             problems.append((question, answer, expected))
+            correct = False
         if correct:
             score = score + 1
             results[question] = 1
@@ -319,20 +322,30 @@ for q in res:
           "(%.1f%%)" % (100.0*fraction))
 print("   Total students taking exam", total)
 
-# Report the answer sheets with blank or multiple-mark questions.
-# A multiple mark that includes the correct answer was given the point.
+# Report the answer sheets with blank or multiple-mark questions.  A
+# multiple mark gets no point from this script; the report says whether
+# the key is among the marks so the professor can decide what to do.
 if sheetProblems:
-    print("BLANK OR MULTIPLE-MARK ANSWERS")
+    print("BLANK OR MULTIPLE-MARK ANSWERS (no point given, decide by hand)")
+    withKey = 0
     for lastname, firstname, sid, question, marked, expected in sheetProblems:
-        credit = ""
+        note = ""
         if marked != "blank":
-            credit = " (point given)" if all(
-                e in marked for e in expected.upper()) else " (no point)"
+            if expected == expected.lower():
+                hasKey = any(m in expected.upper() for m in marked)
+            else:
+                hasKey = all(e in marked for e in expected)
+            if hasKey:
+                note = " (the correct answer is among the marks)"
+                withKey = withKey + 1
+            else:
+                note = " (none of the marks is correct)"
         print("   ", lastname, firstname, sid, question,
-              "marked", marked, "key", expected + credit)
+              "marked", marked, "key", expected + note)
     print("   Sheets with problems",
           len({(p[2]) for p in sheetProblems}),
-          "questions with problems", len(sheetProblems))
+          "questions with problems", len(sheetProblems),
+          "multiple marks that include the key", withKey)
 
 if options.byProblem:
     # Columns: the roster columns (minus identifier aliases, blank columns
