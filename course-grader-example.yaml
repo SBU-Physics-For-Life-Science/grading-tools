@@ -1,0 +1,149 @@
+# Example configuration for course-grader.py.
+#
+# File names are relative to the folder holding this file.  Copy it
+# next to the score files of the course and edit it.
+
+# The roster exported from Brightspace (OrgDefinedId, Username, Last
+# Name, First Name, Section) or Blackboard (Student ID, ...).  Every
+# student on it gets a grade.
+roster: phy122-2026_roster.csv
+
+# The output files.  "output" holds the roster columns, the score of
+# every category in percent, the weights used for the student, the
+# totals, the letter and the notes.  "plot" is a histogram of the
+# totals.  Either can be left out.
+output: phy122-2026-grades.csv
+plot: phy122-2026-totals.png
+
+# Lower bound of the total for every letter.  The total is rounded to
+# "round_digits" decimals before the letter is looked up (leave it out
+# for no rounding).
+letter_grades: {A: 90, "A−": 82.5, B+: 75, B: 70, "B−": 65, C+: 60, C: 55, "C−": 50, D: 45, F: 0}
+round_digits: 0
+
+# The categories.  For each one:
+#   weight        in percent of the total; the regular weights should
+#                 add up to 100
+#   extra_credit  true for a bonus category: its weight is added on top
+#                 of the 100% and never receives a redistributed weight
+#   file          the CSV with the scores; the header row is found
+#                 automatically, so the lines Pearson or the scanning
+#                 centre write above it need not be removed
+#   column        the one column with the score, or
+#   columns       a glob pattern (or a list of patterns) matching the
+#                 columns with one score per item (homework, lecture, ...)
+#   max           the maximum of each column (default 100); a number, a
+#                 mapping {column: max}, or use
+#   max_row       the label of a row of the file holding the maxima
+#                 (Pearson's "Assigned Points:" row); a column with no
+#                 points is ignored
+#   drop_lowest   how many of the lowest item scores to drop
+#   match         how the file names the students: sid, name, email, or
+#                 a list tried in that order (default: every way the
+#                 file supports, id first)
+#   skip_after_header  rows to skip right after the header (e.g. the row
+#                 of maximum points in a Vevox export)
+#   missing_item  "zero" (default) or "ignore" for an item left blank;
+#                 Pearson's "--" (not assigned) is always ignored
+#   missing_student  "zero" (default) or "ignore" for a student who is
+#                 not in the file at all; "ignore" excludes the category
+#                 for that student and moves its weight to the others
+#   title         a longer name, for the printout
+categories:
+  midterm1:
+    title: Midterm 1
+    weight: 17.5
+    file: midterm1-results.csv       # from exam-grader.py
+    column: Score
+    max: 12
+  midterm2:
+    title: Midterm 2
+    weight: 17.5
+    file: midterm2-results.csv
+    column: Score
+    max: 12
+  final:
+    title: Final
+    weight: 20
+    file: final-results.csv
+    column: Score
+    max: 21
+  lab:
+    title: Lab
+    weight: 25
+    file: lab-scores.csv
+    column: Lab
+  homework:
+    title: Homework
+    weight: 10
+    file: HW.csv                     # the Pearson gradebook export
+    match: name
+    columns: "Lecture * Homework"
+    max_row: "Assigned Points:"
+    drop_lowest: 1
+  clickers:
+    title: Clickers
+    weight: 10
+    file: graded_clickers.csv        # one column per question, 0/50/100
+    match: [name, email]
+    skip_after_header: 1
+    columns: "Q*"
+    max: 100
+  prelecture:
+    title: Prelecture
+    weight: 5
+    extra_credit: true
+    file: Prelecture.csv
+    match: name
+    columns: "Lecture * Prelecture"  
+    max_row: "Assigned Points:"
+  adaptive:
+    title: Adaptive follow up
+    weight: 2.5
+    extra_credit: false
+    file: Followup.csv
+    match: name
+    columns: "Lecture * Adaptive*" # leaves out "... (not graded)"
+    max: 1
+
+# Students who appear under another name in some files (Pearson often
+# has a different first name).  A student is given by id or as
+# "Last, First" as on the roster; the alias as "Last, First" as in the
+# file.
+aliases:
+  - {student: "Doe Martinez, Jane", name: "Doe, Jane"}
+  - {student: 100000002, name: "Smith, Johnny"}
+
+# Exceptions for single students.  Each may have:
+#   note          copied to the output
+#   exclude       categories not counted; their weight goes to the
+#                 categories in "redistribute" or, without it, to all
+#                 the other regular categories in proportion to their
+#                 weights
+#   drop_lowest   {category: n} drops n lowest items instead of the
+#                 category's default
+#   drop          {category: [items]} leaves out the named items (column
+#                 names, "*" and "?" allowed), e.g. clicker questions of
+#                 a missed lecture or one homework
+#   set           {category: score} sets a score (in percent) by hand
+#   letter        forces the letter grade (I, F, ...)
+exceptions:
+  - student: "Doe Martinez, Jane"
+    note: "Missed midterm 2 (excused); weight moved to midterm 1"
+    exclude: [midterm2]
+    redistribute: [midterm1]
+  - student: 100000003
+    note: "Missed midterm 1; weight spread over the other categories"
+    exclude: [midterm1]
+  - student: "Smith, John"
+    note: "Two homeworks dropped (documented absence)"
+    drop_lowest: {homework: 2}
+  - student: 100000004
+    note: "Clicker not working on lecture 7, homework 5 excused"
+    drop: {clickers: [Q17, Q18, Q19], homework: ["Lecture 05 Homework"]}
+  - student: "Roe, Richard"
+    note: "Lab score corrected by the lab instructor"
+    set: {lab: 65}
+  - student: 100000005
+    note: "Incomplete"
+    letter: I

@@ -69,3 +69,52 @@ With `--by-problem` the results file has one column per problem with a
 the student identifier is written once, in a column called `SID`.
 Randomized variants of one problem, named like `Question1.1_v1` and
 `Question1.1_v2`, are reported under the common name `Question1.1`.
+
+## course-grader.py
+
+Combine the scores of all the categories of a course (exams, lab,
+homework, clickers, extra credit, ...) into a total and a letter grade
+for every student on the roster.  Everything is described in a YAML
+file; `course-grader-example.yaml` is a documented example.
+
+```
+usage: course-grader.py [-h] [-s WHO] [-n] config
+
+positional arguments:
+  config             The YAML configuration file
+
+options:
+  -h, --help         show this help message and exit
+  -s, --student WHO  Print a detailed breakdown for one student, given by id
+                     or as 'Last, First' (may be repeated)
+  -n, --dry-run      Compute and print the summary but write no files
+```
+
+The configuration gives the roster, the output files, the letter
+scale and, for every category, its weight, the CSV with the scores,
+which column(s) hold them and their maximum, how the file names the
+students (id, name or email), and how many of the lowest scores to
+drop.  Score files are read as they come from the scanning centre,
+Pearson, Vevox or `exam-grader.py`: the header row is found
+automatically and Pearson's "Assigned Points:" row can supply the
+maxima.  Students are matched by id when the file has one, otherwise
+by name; `aliases` map a student to a different name used in a file.
+
+The score of a category is the average, in percent, of its items
+after the drops.  The total is the sum of score × weight; the weights
+of extra-credit categories add on top of 100.  A student missing from
+a file gets 0 in that category and is listed in the printout, as are
+the rows of a file that match nobody on the roster.
+
+`exceptions` adjust single students: exclude a category and move its
+weight to the other categories (all of them in proportion to their
+weights, or only those named), drop more lowest scores, leave out
+particular items such as the clicker questions of a missed lecture,
+set a score by hand, or force a letter grade.  Every exception carries a note
+that is copied to the results.
+
+The results file repeats the roster columns and adds the score and the
+weight of every category, the total with and without extra credit, the
+letter and the notes.  A histogram of the totals with the letter
+bounds can also be written.  PyYAML is used when installed; otherwise
+a small built-in reader handles the configuration.
