@@ -17,6 +17,7 @@ import argparse
 import csv
 import fnmatch
 import io
+import math
 import os.path
 import re
 import sys
@@ -300,6 +301,12 @@ class ScoreTable:
             if not matched:
                 raise RuntimeError("No column matches '%s' in %s" % (p, path))
             columns += [m for m in matched if m not in columns]
+        excluded = spec.get("exclude_columns") or list()
+        if isinstance(excluded, str): excluded = [excluded]
+        columns = [c for c in columns
+                   if not any(fnmatch.fnmatchcase(c, e) for e in excluded)]
+        if not columns:
+            raise RuntimeError("No score columns left for %s" % self.name)
         # The maximum of each column: a number for all of them, a
         # mapping per column, or a row of the file (e.g. Pearson's
         # "Assigned Points:" row).  A column whose maximum is 0 or
@@ -382,12 +389,20 @@ class ScoreTable:
                     return row
         return None
 
-    def Unused(self):
-        # Rows of the file that belong to nobody on the roster.
+    def UsedKeys(self):
+        # The keys of the rows that were matched to a roster student.
+        return {k for row in self.rows if row["_used"]
+                for k in row["_keys"].values() if k and k != ("", "")}
+
+    def Unused(self, usedKeys):
+        # Rows of the file that belong to nobody on the roster: none of
+        # their keys was matched, in this table or in another table
+        # reading the same file for another section.
         out = list()
         for row in self.rows:
-            if row["_used"]: continue
             keys = row["_keys"]
+            if row["_used"] or any(k in usedKeys for k in keys.values()):
+                continue
             label = keys.get("sid") or ""
             name = keys.get("name") or keys.get("email")
             if name and name != ("", ""):
@@ -401,7 +416,8 @@ class ScoreTable:
 # patterns) and dropping the lowest ones.  Returns the score (None if
 # the student is not in the file) and the list of items used, for the
 # detailed breakdown.
-def CategoryScore(table, student, dropLowest, missingItem, dropItems=()):
+def CategoryScore(table, student, dropLowest, missingItem, dropItems=(),
+                  notAssigned="ignore"):
     row = table.Lookup(student)
     if row is None: return None, list()
     values = list()
@@ -411,7 +427,8 @@ def CategoryScore(table, student, dropLowest, missingItem, dropItems=()):
             continue
         v = ParseNumber(row.get(column))
         if v is None:
-            if missingItem == "ignore" or NotAssigned(row.get(column)):
+            if missingItem == "ignore" or (
+                    notAssigned == "ignore" and NotAssigned(row.get(column))):
                 values.append((column, None, maximum, None)); continue
             v = 0.0
         values.append((column, v, maximum, 100.0*v/maximum))
@@ -444,11 +461,14 @@ for a in config.get("aliases", None) or list():
     names = a.get("names") or [a.get("name")]
     for name in names: roster.AddAlias(a.get("student", ""), name)
 
-# The categories, in the order of the configuration.
+# The categories, in the order of the configuration.  A category may
+# have "sections": overrides of its settings for the students of a
+# section of the roster (another file, another number of drops, ...).
+sectionColumn = config.get("section_column", "Section")
 categories = list()
 tables = dict()
 for name, spec in config["categories"].items():
-    if spec is None or "file" not in spec:
+    if spec is None:
         raise RuntimeError("Category %s needs a 'file'" % name)
     spec.setdefault("weight", 0)
     spec.setdefault("title", name)
@@ -456,8 +476,34 @@ for name, spec in config["categories"].items():
     spec.setdefault("drop_lowest", 0)
     spec.setdefault("missing_item", "zero")
     spec.setdefault("missing_student", "zero")
+    spec.setdefault("not_assigned", "ignore")
     categories.append(name)
-    tables[name] = ScoreTable(name, Path(spec["file"]), spec)
+    specs = {None: spec}
+    for section, override in (spec.get("sections") or {}).items():
+        merged = {k: v for k, v in spec.items() if k != "sections"}
+        override = override or {}
+        # A section that names its own columns or maxima replaces the
+        # category's, it does not add to them.
+        for group in (("column", "columns"), ("max", "max_row")):
+            if any(k in override for k in group):
+                for k in group: merged.pop(k, None)
+        merged.update(override)
+        specs[str(section).strip()] = merged
+    tables[name] = dict()
+    for section, sp in specs.items():
+        if "file" not in sp:
+            raise RuntimeError("Category %s needs a 'file'" % name)
+        label = name if section is None else "%s [%s]" % (name, section)
+        tables[name][section] = (sp, ScoreTable(label, Path(sp["file"]), sp))
+    if len(specs) > 1 and sectionColumn not in roster.fields:
+        raise RuntimeError("Category %s has sections but the roster has no"
+                           " '%s' column" % (name, sectionColumn))
+
+def SpecFor(name, student):
+    # The settings and the score table of a category for one student.
+    section = str(student["row"].get(sectionColumn, "")).strip()
+    if section.endswith(".0"): section = section[:-2]
+    return tables[name].get(section) or tables[name][None]
 weights = {c: float(config["categories"][c]["weight"]) for c in categories}
 regular = [c for c in categories if not config["categories"][c]["extra_credit"]]
 bonus = [c for c in categories if config["categories"][c]["extra_credit"]]
@@ -487,7 +533,8 @@ for e in config.get("exceptions", None) or list():
     for c, items in (e.get("drop") or {}).items():
         if isinstance(items, str): items = [items]
         e["drop"][c] = [str(i) for i in items]
-        columns = [column for column, maximum in tables[c].items]
+        columns = [column for sp, t in tables[c].values()
+                   for column, maximum in t.items]
         for item in e["drop"][c]:
             if not any(fnmatch.fnmatchcase(column, item) for column in columns):
                 raise RuntimeError("No item '%s' in %s for the exception for %s"
@@ -499,8 +546,13 @@ letterGrades = config.get("letter_grades") or dict()
 letters = sorted(letterGrades.items(), key=lambda kv: -float(kv[1]))
 roundDigits = config.get("round_digits", None)
 
+def RoundHalfUp(x, digits):
+    # Like a spreadsheet's ROUND: 84.5 becomes 85 (Python's round gives 84).
+    scale = 10.0**int(digits)
+    return math.floor(x*scale + 0.5)/scale
+
 def LetterGrade(total):
-    if roundDigits is not None: total = round(total, int(roundDigits))
+    if roundDigits is not None: total = RoundHalfUp(total, roundDigits)
     for letter, bound in letters:
         if total >= float(bound): return letter
     return letters[-1][0] if letters else ""
@@ -511,7 +563,7 @@ for student in roster.student:
     sid = student["SID"]
     excl = exceptions.get(sid, list())
     scores, details, notes = dict(), dict(), list()
-    dropLowest = {c: int(config["categories"][c]["drop_lowest"]) for c in categories}
+    dropLowest = {c: int(SpecFor(c, student)[0]["drop_lowest"]) for c in categories}
     dropItems = {c: list() for c in categories}
     forcedLetter = None
     excluded, redistribute = list(), None
@@ -523,9 +575,10 @@ for student in roster.student:
         if e.get("redistribute"): redistribute = e["redistribute"]
         if e.get("letter"): forcedLetter = str(e["letter"])
     for c in categories:
-        spec = config["categories"][c]
-        score, detail = CategoryScore(tables[c], student, dropLowest[c],
-                                      spec["missing_item"], dropItems[c])
+        spec, table = SpecFor(c, student)
+        score, detail = CategoryScore(table, student, dropLowest[c],
+                                      spec["missing_item"], dropItems[c],
+                                      spec["not_assigned"])
         if score is None:
             if spec["missing_student"] == "ignore":
                 notes.append("not in %s" % c)
@@ -558,20 +611,25 @@ for student in roster.student:
 
 # Report what did not match.
 for c in categories:
-    spec = config["categories"][c]
     missing = [r["student"] for r in results
-               if tables[c].Lookup(r["student"]) is None]
+               if SpecFor(c, r["student"])[1].Lookup(r["student"]) is None]
     if missing:
-        print("%s: %d roster student%s not in the file (scored %s):" % (
-            c, len(missing), "" if len(missing) == 1 else "s",
-            "0" if spec["missing_student"] == "zero" else "excluded"))
+        print("%s: %d roster student%s not in the file (scored 0 unless"
+              " missing_student is 'ignore'):" % (
+                  c, len(missing), "" if len(missing) == 1 else "s"))
         for s in missing:
             print("    ", s["SID"], s["LASTNAME"], s["FIRSTNAME"])
-    unused = tables[c].Unused()
-    if unused:
-        print("%s: %d row%s of the file match nobody on the roster:" % (
-            c, len(unused), "" if len(unused) == 1 else "s"))
-        for u in unused: print("    ", u)
+    usedKeys = set()
+    for sp, table in tables[c].values(): usedKeys |= table.UsedKeys()
+    seen = set()
+    for section, (sp, table) in tables[c].items():
+        unused = [u for u in table.Unused(usedKeys) if u not in seen]
+        seen |= set(unused)
+        if unused:
+            print("%s: %d row%s of %s match nobody on the roster:" % (
+                c, len(unused), "" if len(unused) == 1 else "s",
+                os.path.basename(sp["file"])))
+            for u in unused: print("    ", u)
 
 # Summary.
 print("SUMMARY")

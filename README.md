@@ -99,6 +99,9 @@ Pearson, Vevox or `exam-grader.py`: the header row is found
 automatically and Pearson's "Assigned Points:" row can supply the
 maxima.  Students are matched by id when the file has one, otherwise
 by name; `aliases` map a student to a different name used in a file.
+A category can have `sections` with different settings for the
+students of each section of the roster: another file, other columns
+or another number of dropped scores.
 
 The score of a category is the average, in percent, of its items
 after the drops.  The total is the sum of score × weight; the weights

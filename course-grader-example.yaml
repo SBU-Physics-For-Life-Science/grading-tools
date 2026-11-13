@@ -43,8 +43,14 @@ round_digits: 0
 #                 file supports, id first)
 #   skip_after_header  rows to skip right after the header (e.g. the row
 #                 of maximum points in a Vevox export)
-#   missing_item  "zero" (default) or "ignore" for an item left blank;
-#                 Pearson's "--" (not assigned) is always ignored
+#   exclude_columns  pattern(s) of columns to leave out of "columns"
+#   missing_item  "zero" (default) or "ignore" for an item left blank
+#   not_assigned  "ignore" (default) or "zero" for Pearson's "--", an
+#                 item that was not assigned to the student
+#   sections      {section: {...}} settings that replace the above for
+#                 the students of a section of the roster (its "Section"
+#                 column, or "section_column" at the top level): another
+#                 file, other columns, another number of drops, ...
 #   missing_student  "zero" (default) or "ignore" for a student who is
 #                 not in the file at all; "ignore" excludes the category
 #                 for that student and moves its weight to the others
@@ -59,13 +65,13 @@ categories:
   midterm2:
     title: Midterm 2
     weight: 17.5
-    file: midterm2-results.csv
+    file: midterm2-results.csv      # from exam-grader.py
     column: Score
     max: 12
   final:
     title: Final
     weight: 20
-    file: final-results.csv
+    file: final-results.csv        # from exam-grader.py
     column: Score
     max: 21
   lab:
@@ -80,15 +86,24 @@ categories:
     match: name
     columns: "Lecture * Homework"
     max_row: "Assigned Points:"
-    drop_lowest: 1
+    drop_lowest: 1                   # both sections drop one
+    sections:
+      1: {drop_lowest: 2}            # section 01 drops two
   clickers:
     title: Clickers
     weight: 10
-    file: graded_clickers.csv        # one column per question, 0/50/100
-    match: [name, email]
-    skip_after_header: 1
-    columns: "Q*"
-    max: 100
+    file: clickers-brightspace.csv   # section 69: one column per lecture
+    columns: "Lecture *"
+    max: 1
+    sections:                        # section 01 used Vevox instead
+      1:
+        file: graded_clickers.csv    # one column per question, 0/50/100
+        match: [name, email]
+        skip_after_header: 1
+        columns: "Q*"
+        exclude_columns: [Q1, Q2, Q3, Q4]
+        max: 100
+        drop_lowest: 8
   prelecture:
     title: Prelecture
     weight: 5
@@ -97,14 +112,6 @@ categories:
     match: name
     columns: "Lecture * Prelecture"  
     max_row: "Assigned Points:"
-  adaptive:
-    title: Adaptive follow up
-    weight: 2.5
-    extra_credit: false
-    file: Followup.csv
-    match: name
-    columns: "Lecture * Adaptive*" # leaves out "... (not graded)"
-    max: 1
 
 # Students who appear under another name in some files (Pearson often
 # has a different first name).  A student is given by id or as
