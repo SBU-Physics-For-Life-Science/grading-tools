@@ -512,6 +512,9 @@ print("Weights: %s = %g%%, extra credit: %s = %g%%" % (
     sum(weights[c] for c in regular),
     ", ".join("%s %g" % (c, weights[c]) for c in bonus) or "none",
     sum(weights[c] for c in bonus)))
+if abs(sum(weights[c] for c in regular) - 100) > 0.01:
+    Warn("The regular weights add up to %g, not 100"
+         % sum(weights[c] for c in regular))
 
 # The exceptions, keyed by student id.
 exceptions = dict()
@@ -525,7 +528,7 @@ for e in config.get("exceptions", None) or list():
             raise RuntimeError("Unknown key '%s' in the exception for %s"
                                % (key, e["student"]))
     for c in (e.get("exclude") or []) + list((e.get("drop_lowest") or {})) \
-            + list((e.get("set") or {})) + (e.get("redistribute") or []) \
+            + list((e.get("set") or {})) + list(e.get("redistribute") or []) \
             + list((e.get("drop") or {})):
         if c not in categories:
             raise RuntimeError("Unknown category '%s' in the exception for %s"
@@ -590,11 +593,25 @@ for student in roster.student:
         for c, v in (e.get("set") or {}).items(): scores[c] = float(v)
     # The weights of this student: the weight of an excluded category
     # goes to the other categories, in proportion to their weights, or
-    # to the categories named by "redistribute".
+    # to the categories listed in "redistribute"; or "redistribute" is
+    # a mapping giving the new weights of some categories outright.
     w = dict(weights)
     moved = sum(w[c] for c in excluded)
     for c in excluded: w[c] = 0.0
-    if moved > 0:
+    if isinstance(redistribute, dict):
+        for c, v in redistribute.items():
+            if c in excluded or c not in regular:
+                raise RuntimeError("%s %s: cannot give a weight to %s, which is"
+                                   " excluded or extra credit"
+                                   % (student["LASTNAME"], student["FIRSTNAME"], c))
+            w[c] = float(v)
+        expected = sum(weights[c] for c in regular)
+        if abs(sum(w[c] for c in regular) - expected) > 0.01:
+            raise RuntimeError("%s %s: the weights %s add up to %g, not %g" % (
+                student["LASTNAME"], student["FIRSTNAME"],
+                ", ".join("%s %g" % (c, w[c]) for c in regular if w[c] > 0),
+                sum(w[c] for c in regular), expected))
+    elif moved > 0:
         targets = redistribute or [c for c in regular if c not in excluded]
         base = sum(w[c] for c in targets)
         if base <= 0:

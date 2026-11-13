@@ -77,6 +77,10 @@ homework, clickers, extra credit, ...) into a total and a letter grade
 for every student on the roster.  Everything is described in a YAML
 file; `course-grader-example.yaml` is a documented example.
 
+**Work in progress.** The grader has been tested on the grades of
+PHY122 Spring 2026 (the example file is not that configuration).  It
+will be finalized with the grades of PHY121 Fall 2026.
+
 ```
 usage: course-grader.py [-h] [-s WHO] [-n] config
 
@@ -111,7 +115,8 @@ the rows of a file that match nobody on the roster.
 
 `exceptions` adjust single students: exclude a category and move its
 weight to the other categories (all of them in proportion to their
-weights, or only those named), drop more lowest scores, leave out
+weights, only those listed, or new weights given outright for some
+categories), drop more lowest scores, leave out
 particular items such as the clicker questions of a missed lecture,
 set a score by hand, or force a letter grade.  Every exception carries a note
 that is copied to the results.

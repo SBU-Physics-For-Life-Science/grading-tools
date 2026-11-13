@@ -65,7 +65,8 @@ round_digits: 0
 #   sections      {section: {...}} settings that replace the above for
 #                 the students of a section of the roster (its "Section"
 #                 column, or "section_column" at the top level): another
-#                 file, other columns, another number of drops, ...
+#                 file, other columns, another number of drops, ...  A
+#                 section that is not listed keeps the settings above.
 #   missing_student  "zero" (default) or "ignore" for a student who is
 #                 not in the file at all; "ignore" excludes the category
 #                 for that student and moves its weight to the others
@@ -73,13 +74,13 @@ round_digits: 0
 categories:
   midterm1:
     title: Midterm 1
-    weight: 17.5
+    weight: 16
     file: midterm1-results.csv       # from exam-grader.py
     column: Score
     max: 12
   midterm2:
     title: Midterm 2
-    weight: 17.5
+    weight: 16
     file: midterm2-results.csv      # from exam-grader.py
     column: Score
     max: 12
@@ -88,30 +89,30 @@ categories:
     weight: 20
     file: final-results.csv        # from exam-grader.py
     column: Score
-    max: 21
+    max: 23
   lab:
     title: Lab
     weight: 25
-    file: lab-scores.csv
+    file: lab-scores.csv           # from lab instructor
     column: Lab
   homework:
     title: Homework
-    weight: 10
+    weight: 12
     file: HW.csv                     # the Pearson gradebook export
     match: name
     columns: "Lecture * Homework"
     max_row: "Assigned Points:"
-    drop_lowest: 1                   # both sections drop one
+    drop_lowest: 1                   # section 69 (not listed below): drop one
     sections:
-      1: {drop_lowest: 2}            # section 01 drops two
+      1: {drop_lowest: 2}            # section 01: drop two
   clickers:
     title: Clickers
-    weight: 10
-    file: clickers-brightspace.csv   # section 69: one column per lecture
-    columns: "Lecture *"
-    max: 1
-    sections:                        # section 01 used Vevox instead
-      1:
+    weight: 8
+    file: clickers-brightspace.csv   # section 69 (not listed below): the
+    columns: "Lecture *"             #   Brightspace export, one column
+    max: 1                           #   per lecture, no drop
+    sections:
+      1:                             # section 01: Vevox instead
         file: graded_clickers.csv    # one column per question, 0/50/100
         match: [name, email]
         skip_after_header: 1
@@ -139,9 +140,13 @@ aliases:
 # Exceptions for single students.  Each may have:
 #   note          copied to the output
 #   exclude       categories not counted; their weight goes to the
-#                 categories in "redistribute" or, without it, to all
-#                 the other regular categories in proportion to their
-#                 weights
+#                 other regular categories in proportion to their
+#                 weights, unless "redistribute" says otherwise
+#   redistribute  either the new weights of some categories, as
+#                 {midterm1: 24, homework: 20}: with the others they
+#                 must still add up to the course's 100; or a list of
+#                 categories that share the excluded weight in
+#                 proportion to their weights, as [midterm1, homework]
 #   drop_lowest   {category: n} drops n lowest items instead of the
 #                 category's default
 #   drop          {category: [items]} leaves out the named items (column
@@ -151,9 +156,9 @@ aliases:
 #   letter        forces the letter grade (I, F, ...)
 exceptions:
   - student: "Doe Martinez, Jane"
-    note: "Missed midterm 2 (excused); weight moved to midterm 1"
+    note: "Missed midterm 2 (excused); weight moved to midterm 1 and homework"
     exclude: [midterm2]
-    redistribute: [midterm1]
+    redistribute: {midterm1: 24, homework: 20}
   - student: 100000003
     note: "Missed midterm 1; weight spread over the other categories"
     exclude: [midterm1]
