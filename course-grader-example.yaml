@@ -17,13 +17,18 @@ roster: phy122-2026_roster.csv
 #                               the totals)
 #   total-cumulative.png        fraction of the students above each
 #                               total, with the letter bounds
+#   lettergrades.png            fraction of A, B, C, D, F (the +/-
+#                               folded in), all students and each
+#                               section side by side
 #   <category>-items.png        mean score of every item (homework,
 #                               clicker question, ...)
 #   scatter-<x>-<y>.png         one category against another, a point
 #                               per student, for the pairs in "scatter"
-# Either can be left out.
+# "plot_prefix" is put in front of every figure's name.  Either file
+# can be left out.
 output: phy122-2026-grades.csv
 plots: phy122-2026-plots
+plot_prefix: phy122-2026_
 scatter: [[homework, final], [clickers, final], [midterm1, final]]
 
 # The printout ends with the students that a bump of this many points

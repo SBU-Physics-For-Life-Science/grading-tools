@@ -839,6 +839,39 @@ if plots:
         ax.legend(frameon=False, loc="lower left", labelcolor=ink)
         fig.tight_layout(); fig.savefig(path, facecolor=surface); plt.close(fig)
 
+    def LetterFractions(path):
+        # The fraction of every group with each letter, the +/- folded
+        # into the plain letter: grouped bars, one colour per group.
+        order = list()
+        for l, b in letters:
+            base = l[0] if l[0] in "ABCDF" else l
+            if base not in order: order.append(base)
+        for label, g in groups:
+            for r in g:
+                base = r["letter"][0] if r["letter"][:1] in "ABCDF" else r["letter"]
+                if base not in order: order.append(base)
+        fig, ax = plt.subplots(figsize=(8, 4.5), dpi=150)
+        fig.patch.set_facecolor(surface); Frame(ax)
+        width = 0.8/len(groups)
+        for i, (label, g) in enumerate(groups):
+            counts = dict()
+            for r in g:
+                base = r["letter"][0] if r["letter"][:1] in "ABCDF" else r["letter"]
+                counts[base] = counts.get(base, 0) + 1
+            fractions = [100.0*counts.get(l, 0)/len(g) if g else 0 for l in order]
+            xs = [k + (i - (len(groups) - 1)/2.0)*width for k in range(len(order))]
+            ax.bar(xs, fractions, width=width*0.92, zorder=2,
+                   color=series[i % len(series)], label="%s (n = %d)" % (label, len(g)))
+            for x, f in zip(xs, fractions):
+                if f > 0:
+                    ax.text(x, f + 0.5, "%.0f" % f, ha="center", va="bottom",
+                            fontsize=7, color=muted)
+        ax.set_xticks(range(len(order))); ax.set_xticklabels(order, color=ink)
+        ax.set_ylabel("Students (%)", color=ink)
+        ax.set_title("Letter grades", color=ink, loc="left")
+        ax.legend(frameon=False, loc="upper right", labelcolor=ink)
+        fig.tight_layout(); fig.savefig(path, facecolor=surface); plt.close(fig)
+
     def ShortLabels(names):
         # Strip what all the item names share, e.g. "Lecture 05 Homework"
         # becomes "05"; returns the labels and the stripped text.
@@ -914,25 +947,29 @@ if plots:
 
     folder = Path(plots)
     os.makedirs(folder, exist_ok=True)
+    prefix = str(config.get("plot_prefix", ""))
+    def PlotFile(name): return os.path.join(folder, prefix + name)
     Histogram([(label, [r["total"] for r in g]) for label, g in groups],
               "Distribution of the totals", "Total",
-              os.path.join(folder, "total.png"),
+              PlotFile("total.png"),
               [(l, float(b)) for l, b in letters])
     Cumulative([(label, [r["total"] for r in g]) for label, g in groups],
                "Students above each total", "Total",
-               os.path.join(folder, "total-cumulative.png"),
+               PlotFile("total-cumulative.png"),
                [(l, float(b)) for l, b in letters])
+    if letters:
+        LetterFractions(PlotFile("lettergrades.png"))
     if config.get("plot_categories", True):
         for c in categories:
             Histogram([(label, [r["scores"][c] for r in g]) for label, g in groups],
                       "Distribution of %s" % config["categories"][c]["title"],
-                      "Score (%)", os.path.join(folder, c + ".png"))
+                      "Score (%)", PlotFile(c + ".png"))
             if any(table.items and len(table.items) > 1
                    for sp, table in tables[c].values()):
-                ItemMeans(c, os.path.join(folder, c + "-items.png"))
+                ItemMeans(c, PlotFile(c + "-items.png"))
     for pair in config.get("scatter") or []:
         if not isinstance(pair, list) or len(pair) != 2 or \
                 any(c not in categories for c in pair):
             raise RuntimeError("scatter needs pairs of categories, not %r" % (pair,))
-        Scatter(pair[0], pair[1], os.path.join(folder, "scatter-%s-%s.png" % tuple(pair)))
+        Scatter(pair[0], pair[1], PlotFile("scatter-%s-%s.png" % tuple(pair)))
     print("Plots written to", folder)

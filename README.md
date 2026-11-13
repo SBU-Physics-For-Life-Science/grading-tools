@@ -130,10 +130,12 @@ a histogram of the totals (with the letter bounds) and one of every
 category, each figure holding a panel for all the students and one
 per section (`plot_categories: false` keeps only the totals).  The
 folder also gets a cumulative curve of the totals with the letter
-bounds (`total-cumulative.png`), the mean score of every item of a
+bounds (`total-cumulative.png`), the fraction of A, B, C, D and F in
+every group (`lettergrades.png`), the mean score of every item of a
 category with several items (`homework-items.png`, ...) and, for the
 pairs of categories listed under `scatter`, one category against the
-other with a point per student (`scatter-homework-final.png`).  The
+other with a point per student (`scatter-homework-final.png`);
+`plot_prefix` goes in front of every figure's name.  The
 printout ends with the students that a bump of `near_bound` points
 (default 0.5) would move to a higher letter.  PyYAML is used when
 installed; otherwise a small built-in reader handles the
