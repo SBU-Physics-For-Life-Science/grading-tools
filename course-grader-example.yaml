@@ -8,12 +8,27 @@
 # student on it gets a grade.
 roster: phy122-2026_roster.csv
 
-# The output files.  "output" holds the roster columns, the score of
-# every category in percent, the weights used for the student, the
-# totals, the letter and the notes.  "plot" is a histogram of the
-# totals.  Either can be left out.
+# The output.  "output" holds the roster columns, the score of every
+# category in percent, the weights used for the student, the totals,
+# the letter and the notes.  "plots" is a folder for the figures:
+#   total.png, <category>.png   histograms, a panel for all the
+#                               students and one per section
+#                               ("plot_categories: false" writes only
+#                               the totals)
+#   total-cumulative.png        fraction of the students above each
+#                               total, with the letter bounds
+#   <category>-items.png        mean score of every item (homework,
+#                               clicker question, ...)
+#   scatter-<x>-<y>.png         one category against another, a point
+#                               per student, for the pairs in "scatter"
+# Either can be left out.
 output: phy122-2026-grades.csv
-plot: phy122-2026-totals.png
+plots: phy122-2026-plots
+scatter: [[homework, final], [clickers, final], [midterm1, final]]
+
+# The printout ends with the students that a bump of this many points
+# would move to a higher letter (0 to leave it out).
+near_bound: 0.5
 
 # Lower bound of the total for every letter.  The total is rounded to
 # "round_digits" decimals before the letter is looked up (leave it out

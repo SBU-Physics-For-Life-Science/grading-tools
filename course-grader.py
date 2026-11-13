@@ -607,7 +607,8 @@ for student in roster.student:
     results.append({"student": student, "scores": scores, "weights": w,
                     "details": details, "total": total,
                     "totalNoBonus": totalNoBonus, "letter": letter,
-                    "notes": notes, "excluded": excluded})
+                    "notes": notes, "excluded": excluded,
+                    "forced": forcedLetter is not None})
 
 # Report what did not match.
 for c in categories:
@@ -631,27 +632,67 @@ for c in categories:
                 os.path.basename(sp["file"])))
             for u in unused: print("    ", u)
 
+# The groups of students: everybody, then every section of the roster.
+def Section(student):
+    section = str(student["row"].get(sectionColumn, "")).strip()
+    if section.endswith(".0"): section = section[:-2]
+    return section
+def SectionLabel(section):
+    return "Section %02d" % int(section) if section.isdigit() else \
+           "Section " + section
+sections = sorted({Section(r["student"]) for r in results},
+                  key=lambda s: (not s.isdigit(), int(s) if s.isdigit() else s))
+groups = [("All students", results)]
+if len(sections) > 1:
+    for s in sections:
+        groups.append((SectionLabel(s),
+                       [r for r in results if Section(r["student"]) == s]))
+
+def Mean(values):
+    return sum(values)/len(values) if values else 0.0
+
 # Summary.
 print("SUMMARY")
-n = len(results)
+print("   %-12s %s" % ("", "".join("%18s" % label for label, g in groups)))
+print("   %-12s %s" % ("students", "".join("%18d" % len(g) for label, g in groups)))
 for c in categories:
-    mean = sum(r["scores"][c] for r in results)/n if n else 0
-    nonzero = sum(1 for r in results if r["scores"][c] > 0)
-    print("   %-12s mean %6.2f%%  (%d students with a score > 0)"
-          % (c, mean, nonzero))
-print("   %-12s mean %6.2f   without extra credit %6.2f" % (
-    "total", sum(r["total"] for r in results)/n if n else 0,
-    sum(r["totalNoBonus"] for r in results)/n if n else 0))
+    print("   %-12s %s" % (c, "".join(
+        "%17.2f%%" % Mean([r["scores"][c] for r in g]) for label, g in groups)))
+print("   %-12s %s" % ("total", "".join(
+    "%18.2f" % Mean([r["total"] for r in g]) for label, g in groups)))
+print("   %-12s %s" % ("w/o extra", "".join(
+    "%18.2f" % Mean([r["totalNoBonus"] for r in g]) for label, g in groups)))
 if letters:
-    counts = dict()
-    for r in results: counts[r["letter"]] = counts.get(r["letter"], 0) + 1
-    print("   letter grades:", "  ".join(
-        "%s %d" % (l, counts[l]) for l, b in letters if l in counts),
-        "".join("  %s %d" % (l, counts[l]) for l in counts
-                if l not in dict(letters)))
+    for label, g in groups:
+        counts = dict()
+        for r in g: counts[r["letter"]] = counts.get(r["letter"], 0) + 1
+        print("   letter grades%s:" % (
+            "" if label == groups[0][0] else " " + label.lower()),
+            "  ".join("%s %d" % (l, counts[l]) for l, b in letters if l in counts),
+            "".join("  %s %d" % (l, counts[l]) for l in counts
+                    if l not in dict(letters)))
 if exceptions:
     print("   %d student%s with exceptions" % (
         len(exceptions), "" if len(exceptions) == 1 else "s"))
+
+# The students that a small bump would move to a higher letter.
+nearBound = float(config.get("near_bound", 0.5))
+if letters and nearBound > 0:
+    scale = 10.0**int(roundDigits) if roundDigits is not None else None
+    near = list()
+    for r in results:
+        if r["forced"]: continue
+        higher = LetterGrade(r["total"] + nearBound)
+        if higher == r["letter"]: continue
+        threshold = float(letterGrades[higher])
+        if scale: threshold -= 0.5/scale
+        near.append((higher, threshold - r["total"], r))
+    print("STUDENTS WITHIN %g OF A HIGHER LETTER: %d" % (nearBound, len(near)))
+    for higher, needed, r in sorted(near, key=lambda x: -x[2]["total"]):
+        s = r["student"]
+        print("   %-28s %-10s total %6.2f  %-2s -> %-2s needs +%.2f" % (
+            "%s %s" % (s["LASTNAME"], s["FIRSTNAME"]), s["SID"], r["total"],
+            r["letter"], higher, max(needed, 0.0)))
 
 # Detailed breakdown for the requested students.
 for who in options.students:
@@ -703,37 +744,178 @@ if output:
             writer.writerow(row)
     print("Results written to", Path(output))
 
-# A bar chart of the distribution of the totals.
-plot = config.get("plot")
-if plot:
+# Histograms of the totals and of every category: one figure each,
+# with a panel for all the students and one per section.
+plots = config.get("plots")
+if plots:
     try:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
-        print("matplotlib is not installed: no plot of the totals")
-        plot = None
-if plot:
-    totals = [r["total"] for r in results if r["total"] > 0]
-    mean = sum(totals)/len(totals) if totals else 0
+        print("matplotlib is not installed: no plots")
+        plots = None
+if plots:
     surface, ink, muted, blue = "#fcfcfb", "#0b0b0b", "#52514e", "#2a78d6"
-    fig, ax = plt.subplots(figsize=(8, 4.5), dpi=150)
-    fig.patch.set_facecolor(surface); ax.set_facecolor(surface)
-    top = max(100, int(max(totals) + 5)) if totals else 100
-    ax.hist(totals, bins=range(0, top+5, 5), color=blue, rwidth=0.9, zorder=2)
-    ax.axvline(mean, color=ink, linestyle="--", linewidth=1.5, zorder=3,
-               label="Mean = %.1f" % mean)
-    for letter, bound in letters:
-        if 0 < float(bound) <= top:
-            ax.axvline(float(bound), color=muted, linewidth=0.6, zorder=1)
-            ax.text(float(bound), ax.get_ylim()[1]*0.98, " " + letter,
-                    color=muted, fontsize=7, va="top")
-    ax.set_xlabel("Total", color=ink); ax.set_ylabel("Number of students", color=ink)
-    ax.set_title("Distribution of the totals", color=ink, loc="left")
-    ax.yaxis.grid(True, color="#e3e2de", linewidth=0.8, zorder=0)
-    ax.set_axisbelow(True)
-    for side in ax.spines.values(): side.set_color(muted)
-    ax.tick_params(colors=muted, length=3)
-    ax.legend(frameon=False, loc="upper left", labelcolor=ink)
-    fig.tight_layout(); fig.savefig(Path(plot), facecolor=surface); plt.close(fig)
-    print("Plot of the totals written to", Path(plot))
+    grid = "#e3e2de"
+    series = [blue, "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#6250d6"]
+
+    def Frame(ax):
+        ax.set_facecolor(surface)
+        ax.yaxis.grid(True, color=grid, linewidth=0.8, zorder=0)
+        ax.set_axisbelow(True)
+        for side in ax.spines.values(): side.set_color(muted)
+        ax.tick_params(colors=muted, length=3)
+
+    def LetterLines(ax, bounds, top):
+        for letter, bound in bounds:
+            if 0 < bound <= top:
+                ax.axvline(bound, color=muted, linewidth=0.6, zorder=1)
+                ax.text(bound, ax.get_ylim()[1]*0.98, " " + letter,
+                        color=muted, fontsize=7, va="top")
+
+    def Histogram(panels, title, xlabel, path, bounds=()):
+        # panels: [(label, values)].  Scores of 0 are left out.
+        panels = [(label, [v for v in values if v > 0]) for label, values in panels]
+        top = max([100] + [v for label, values in panels for v in values])
+        top = 5*int(-(-top//5))             # the last bin includes its right edge
+        bins = range(0, top + 1, 5)
+        fig, axes = plt.subplots(len(panels), 1, sharex=True, dpi=150,
+                                 figsize=(8, 1.2 + 2.2*len(panels)))
+        if len(panels) == 1: axes = [axes]
+        fig.patch.set_facecolor(surface)
+        for ax, (label, values) in zip(axes, panels):
+            Frame(ax)
+            ax.hist(values, bins=bins, color=blue, rwidth=0.9, zorder=2)
+            mean = Mean(values)
+            ax.axvline(mean, color=ink, linestyle="--", linewidth=1.5, zorder=3,
+                       label="%s: n = %d, mean = %.1f" % (label, len(values), mean))
+            LetterLines(ax, bounds, top)
+            ax.set_ylabel("Number of students", color=ink)
+            ax.legend(frameon=False, loc="upper left", labelcolor=ink)
+        axes[0].set_title(title, color=ink, loc="left")
+        axes[-1].set_xlabel(xlabel, color=ink)
+        fig.tight_layout(); fig.savefig(path, facecolor=surface); plt.close(fig)
+
+    def Cumulative(panels, title, xlabel, path, bounds=()):
+        # The fraction of the students with at least a given total, one
+        # curve per group.  Scores of 0 are left out.
+        fig, ax = plt.subplots(figsize=(8, 4.5), dpi=150)
+        fig.patch.set_facecolor(surface); Frame(ax)
+        top = 100
+        for i, (label, values) in enumerate(panels):
+            values = sorted(v for v in values if v > 0)
+            if not values: continue
+            top = max(top, values[-1])
+            n = len(values)
+            x = [0] + values + [values[-1]]
+            y = [100.0] + [100.0*(n - k)/n for k in range(n)] + [0.0]
+            ax.plot(x, y, drawstyle="steps-post", linewidth=2, zorder=3,
+                    color=ink if i == 0 else series[(i - 1) % len(series)],
+                    label="%s (n = %d)" % (label, n))
+        top = 5*int(-(-top//5))
+        ax.set_xlim(0, top); ax.set_ylim(0, 100)
+        LetterLines(ax, bounds, top)
+        ax.set_xlabel(xlabel, color=ink)
+        ax.set_ylabel("Students with at least this total (%)", color=ink)
+        ax.set_title(title, color=ink, loc="left")
+        ax.legend(frameon=False, loc="lower left", labelcolor=ink)
+        fig.tight_layout(); fig.savefig(path, facecolor=surface); plt.close(fig)
+
+    def ShortLabels(names):
+        # Strip what all the item names share, e.g. "Lecture 05 Homework"
+        # becomes "05"; returns the labels and the stripped text.
+        if len(names) < 2: return list(names), ""
+        prefix = os.path.commonprefix(names)
+        suffix = os.path.commonprefix([n[::-1] for n in names])[::-1]
+        if len(prefix) + len(suffix) >= min(len(n) for n in names):
+            suffix = ""
+        short = [n[len(prefix):len(n) - len(suffix)] or n for n in names]
+        return short, (prefix + "…" + suffix).strip() if prefix or suffix else ""
+
+    def ItemMeans(c, path):
+        # The mean score of every item of a category: one panel per group
+        # when the sections share the file, else one per section.
+        if list(tables[c]) == [None]:
+            panels = [(label, tables[c][None][1], g) for label, g in groups]
+        else:
+            panels = [(SectionLabel(s), SpecFor(c, g[0]["student"])[1], g)
+                      for s, (label, g) in zip(sections, groups[1:]) if g]
+        panels = [p for p in panels if len(p[1].items) > 1]
+        if not panels: return
+        fig, axes = plt.subplots(len(panels), 1, dpi=150,
+                                 figsize=(8, 1.6 + 2.4*len(panels)))
+        if len(panels) == 1: axes = [axes]
+        fig.patch.set_facecolor(surface)
+        for ax, (label, table, g) in zip(axes, panels):
+            Frame(ax)
+            names = [column for column, m in table.items]
+            means, counts = list(), list()
+            for column in names:
+                pcts = [100.0*v/m for r in g for col, v, m, p, d in r["details"][c]
+                        if col == column and v is not None and m]
+                means.append(Mean(pcts)); counts.append(len(pcts))
+            short, stripped = ShortLabels(names)
+            ax.bar(range(len(names)), means, color=blue, width=0.8, zorder=2)
+            ax.axhline(Mean(means), color=ink, linestyle="--", linewidth=1.5,
+                       zorder=3)
+            ax.set_title("%s: %d students, mean of the items = %.1f (dashed)"
+                         % (label, len(g), Mean(means)), color=muted,
+                         fontsize=9, loc="left")
+            ax.set_xticks(range(len(names)))
+            ax.set_xticklabels(short, fontsize=7, color=muted,
+                               rotation=90 if max(len(s) for s in short) > 3
+                               or len(short) > 20 else 0)
+            ax.set_ylim(0, 100); ax.set_ylabel("Mean score (%)", color=ink)
+            ax.set_xlabel(stripped, color=muted, fontsize=8)
+        fig.suptitle("Items of %s" % config["categories"][c]["title"],
+                     color=ink, x=0.02, ha="left")
+        fig.tight_layout(); fig.savefig(path, facecolor=surface); plt.close(fig)
+
+    def Scatter(cx, cy, path):
+        # One category against another, a point per student, the sections
+        # told apart by colour.  Students with a 0 in either are left out.
+        fig, ax = plt.subplots(figsize=(6, 6), dpi=150)
+        fig.patch.set_facecolor(surface); Frame(ax)
+        ax.xaxis.grid(True, color=grid, linewidth=0.8, zorder=0)
+        ax.plot([0, 100], [0, 100], color=muted, linewidth=0.6,
+                linestyle="--", zorder=1)
+        for i, (label, g) in enumerate(groups[1:] or groups):
+            xs = [r["scores"][cx] for r in g if r["scores"][cx] > 0 and r["scores"][cy] > 0]
+            ys = [r["scores"][cy] for r in g if r["scores"][cx] > 0 and r["scores"][cy] > 0]
+            ax.scatter(xs, ys, s=22, color=series[i % len(series)], zorder=3,
+                       edgecolors=surface, linewidths=0.6, alpha=0.9,
+                       label="%s (n = %d)" % (label, len(xs)))
+        titles = config["categories"]
+        ax.set_xlim(0, 100); ax.set_ylim(0, 100); ax.set_aspect("equal")
+        ax.set_xlabel("%s (%%)" % titles[cx]["title"], color=ink)
+        ax.set_ylabel("%s (%%)" % titles[cy]["title"], color=ink)
+        ax.set_title("%s against %s" % (titles[cy]["title"], titles[cx]["title"]),
+                     color=ink, loc="left")
+        ax.legend(frameon=False, loc="upper left", labelcolor=ink)
+        fig.tight_layout(); fig.savefig(path, facecolor=surface); plt.close(fig)
+
+    folder = Path(plots)
+    os.makedirs(folder, exist_ok=True)
+    Histogram([(label, [r["total"] for r in g]) for label, g in groups],
+              "Distribution of the totals", "Total",
+              os.path.join(folder, "total.png"),
+              [(l, float(b)) for l, b in letters])
+    Cumulative([(label, [r["total"] for r in g]) for label, g in groups],
+               "Students above each total", "Total",
+               os.path.join(folder, "total-cumulative.png"),
+               [(l, float(b)) for l, b in letters])
+    if config.get("plot_categories", True):
+        for c in categories:
+            Histogram([(label, [r["scores"][c] for r in g]) for label, g in groups],
+                      "Distribution of %s" % config["categories"][c]["title"],
+                      "Score (%)", os.path.join(folder, c + ".png"))
+            if any(table.items and len(table.items) > 1
+                   for sp, table in tables[c].values()):
+                ItemMeans(c, os.path.join(folder, c + "-items.png"))
+    for pair in config.get("scatter") or []:
+        if not isinstance(pair, list) or len(pair) != 2 or \
+                any(c not in categories for c in pair):
+            raise RuntimeError("scatter needs pairs of categories, not %r" % (pair,))
+        Scatter(pair[0], pair[1], os.path.join(folder, "scatter-%s-%s.png" % tuple(pair)))
+    print("Plots written to", folder)

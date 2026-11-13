@@ -118,6 +118,18 @@ that is copied to the results.
 
 The results file repeats the roster columns and adds the score and the
 weight of every category, the total with and without extra credit, the
-letter and the notes.  A histogram of the totals with the letter
-bounds can also be written.  PyYAML is used when installed; otherwise
-a small built-in reader handles the configuration.
+letter and the notes.  The printed summary gives the mean of every
+category, the mean total and the letter counts for all the students
+and for each section of the roster.  With `plots`, a folder receives
+a histogram of the totals (with the letter bounds) and one of every
+category, each figure holding a panel for all the students and one
+per section (`plot_categories: false` keeps only the totals).  The
+folder also gets a cumulative curve of the totals with the letter
+bounds (`total-cumulative.png`), the mean score of every item of a
+category with several items (`homework-items.png`, ...) and, for the
+pairs of categories listed under `scatter`, one category against the
+other with a point per student (`scatter-homework-final.png`).  The
+printout ends with the students that a bump of `near_bound` points
+(default 0.5) would move to a higher letter.  PyYAML is used when
+installed; otherwise a small built-in reader handles the
+configuration.
