@@ -1,0 +1,62 @@
+# Mock configuration for the tests of course-grader.py.
+#
+# midterm-results.csv is not in this folder: the test writes it by
+# running exam-grader.py --by-problem on exam-keys.csv and
+# exam-answers.csv, so the two scripts are tested together.
+
+roster: roster.csv
+output: grades.csv
+plots: plots
+plot_prefix: t_
+scatter: [[homework, lab]]
+near_bound: 0.5
+
+letter_grades: {A: 90, B: 80, C: 70, D: 60, F: 0}
+round_digits: 0
+
+categories:
+  midterm:
+    title: Midterm
+    weight: 30
+    file: midterm-results.csv      # from exam-grader.py --by-problem
+    column: Score
+    max: 4
+  homework:
+    title: Homework
+    weight: 30
+    file: homework-pearson.csv     # Pearson style: lines above the header
+    match: name
+    columns: "HW *"
+    max_row: "Assigned Points:"
+    sections:
+      1: {drop_lowest: 1}          # section 1 drops one, section 2 none
+  lab:
+    title: Lab
+    weight: 40
+    file: lab.csv
+    match: name
+    column: Lab
+  bonus:
+    title: Bonus
+    weight: 5
+    extra_credit: true
+    file: bonus.csv
+    column: Bonus
+    max: 10
+
+aliases:
+  - {student: 100000002, name: "Beta, Robert"}
+
+exceptions:
+  - student: 100000002
+    note: "Missed the midterm"
+    exclude: [midterm]
+  - student: "Delta, Dana"
+    note: "Lab corrected"
+    set: {lab: 92}
+  - student: 100000005
+    note: "HW 3 excused"
+    drop: {homework: ["HW 3"]}
+  - student: 100000003
+    note: "Incomplete"
+    letter: I

@@ -1,0 +1,6 @@
+LASTNAME,FIRSTNAME,SID,Answers,QuestionNames
+Alpha,Ann,100000001,A;BC;ab;D;,Question1.1;Question1.2;Question1.3;Question1.4;
+Beta,Bob,100000002,A;BC;ab;D;,Question1.1;Question1.2;Question1.3;Question1.4;
+Gamma,Carl,100000003,C;BC;ab;D;,Question1.1_v2;Question1.2;Question1.3;Question1.4;
+Delta,Dana,100000004,A;BC;ab;D;,Question1.1;Question1.2;Question1.3;Question1.4;
+Epsilon,Eve,100000005,A;BC;ab;D;,Question1.1;Question1.2;Question1.3;Question1.4;
